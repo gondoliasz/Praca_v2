@@ -1,0 +1,34 @@
+:root {
+  --bg: #f8f9fa;
+  --card-bg: #ffffff;
+  --muted: #6c757d;
+}
+
+html, body, #root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial;
+  background: var(--bg);
+  color: #212529;
+}
+
+.App header {
+  background: #fff;
+  border-bottom: 1px solid #e9ecef;
+}
+
+h1, h3, h5 {
+  margin: 0;
+}
+
+.analyze-panel .card {
+  background: var(--card-bg);
+}
+
+.muted-id {
+  font-family: monospace;
+  color: var(--muted);
+}

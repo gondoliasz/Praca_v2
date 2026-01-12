@@ -1,0 +1,7 @@
+fastapi==0.95.2
+uvicorn[standard]==0.22.0
+pandas==2.2.2
+numpy==1.26.4
+scipy==1.11.3
+rpy2==3.5.28
+python-multipart==0.0.6
