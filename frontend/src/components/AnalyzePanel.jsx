@@ -4,13 +4,7 @@ import "./AnalyzePanel.css";
 // base URL for API (configurable via .env VITE_API_BASE)
 const API_BASE = import.meta.env.VITE_API_BASE || "http://127.0.0.1:8001";
 
-/*
-  AnalyzePanel — self-contained component:
-  - Upload CSV -> POST ${API_BASE}/upload (multipart/form-data)
-  - POST ${API_BASE}/analyze {file_id, x, y}
-  - backend returns { recommended_test, stats, plot_base64, actual_x, actual_y, ... }
-*/
-
+/* AnalyzePanel component (z funkcją pobierania Excela) */
 function valueToString(v) {
   if (v === null || v === undefined) return "";
   if (typeof v === "object") return JSON.stringify(v);
@@ -102,12 +96,13 @@ export default function AnalyzePanel() {
 
   const [loadingUpload, setLoadingUpload] = useState(false);
   const [loadingAnalyze, setLoadingAnalyze] = useState(false);
+  const [loadingExport, setLoadingExport] = useState(false);
   const [error, setError] = useState(null);
 
   const [recommended, setRecommended] = useState("");
   const [stats, setStats] = useState(null);
   const [plotBase64, setPlotBase64] = useState(null);
-  const [plotKey, setPlotKey] = useState(null); // force image rerender
+  const [plotKey, setPlotKey] = useState(null);
   const [actualX, setActualX] = useState(null);
   const [actualY, setActualY] = useState(null);
 
@@ -135,7 +130,6 @@ export default function AnalyzePanel() {
       setColumns(data.columns || []);
       setEncoding(data.encoding || null);
       setRows(data.rows || null);
-      // reset analysis state only after successful upload
       setRecommended("");
       setStats(null);
       setPlotBase64(null);
@@ -196,9 +190,47 @@ export default function AnalyzePanel() {
     } catch (e) {
       console.error("Analyze exception:", e);
       setError(e.message || String(e));
-      // keep previous UI
     } finally {
       setLoadingAnalyze(false);
+    }
+  }
+
+  async function downloadExcel() {
+    if (!fileId || !xCol || !yCol) {
+      setError("Aby pobrać plik Excel, najpierw wykonaj upload i analizę (wymagane file_id, X i Y).");
+      return;
+    }
+    setLoadingExport(true);
+    setError(null);
+    try {
+      const payload = { file_id: fileId, x: xCol, y: yCol };
+      const resp = await fetch(`${API_BASE}/export`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!resp.ok) {
+        const txt = await resp.text();
+        throw new Error(txt || resp.statusText);
+      }
+
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const safeX = (xCol || "X").replace(/\s+/g, "_");
+      const safeY = (yCol || "Y").replace(/\s+/g, "_");
+      a.download = `analysis_${fileId}_${safeX}_vs_${safeY}.xlsx`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      console.error("Export error:", e);
+      setError("Eksport nie powiódł się: " + (e.message || e));
+    } finally {
+      setLoadingExport(false);
     }
   }
 
@@ -247,9 +279,12 @@ export default function AnalyzePanel() {
               {columns.map(renderColumnOption)}
             </select>
           </div>
-          <div className="col-md-2">
+          <div className="col-md-2 d-flex flex-column gap-2">
             <button id="analyzeBtn" className="btn btn-success w-100" onClick={analyze} disabled={loadingAnalyze || !fileId}>
               {loadingAnalyze ? "Analiza..." : "Analizuj"}
+            </button>
+            <button id="exportBtn" className="btn btn-outline-primary w-100" onClick={downloadExcel} disabled={loadingExport || !fileId}>
+              {loadingExport ? "Eksport..." : "Pobierz Excel"}
             </button>
           </div>
         </div>

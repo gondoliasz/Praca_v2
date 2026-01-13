@@ -1,4 +1,3 @@
-# Modified to ensure rpy2 conversion context is set in the thread where R is invoked.
 import os
 import re
 import json
@@ -6,13 +5,11 @@ import tempfile
 import io
 import csv
 
-# optional detector
 try:
     import chardet
 except Exception:
     chardet = None
 
-# R-related objects will be initialized lazily to avoid import-time errors on Windows
 _r_loaded = False
 _r_run_analysis = None
 _stat_script_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "r_scripts", "stat_tests.R"))
@@ -106,10 +103,6 @@ def _clean_plot_path(raw):
 
 
 def _write_meta_encoding_if_possible(csv_path: str, encoding: str, delimiter: str = None):
-    """
-    Update .meta.json only if present (safe), but caller decides WHEN to call.
-    This helper remains but run_analysis will NOT call it to avoid overwriting meta during analyze.
-    """
     try:
         base = os.path.splitext(csv_path)[0]
         meta_path = f"{base}.meta.json"
@@ -144,10 +137,6 @@ def _detect_encoding_bytes(raw_bytes: bytes):
 
 
 def _convert_to_comma_csv(src_path: str, src_encoding: str = None, src_delim: str = ','):
-    """
-    Robust conversion: try cp1250/iso-8859-2/latin1/utf-8 variants and fall back to latin1 forced.
-    Returns (out_path, used_encoding)
-    """
     with open(src_path, "rb") as rb:
         raw = rb.read()
 
@@ -341,10 +330,6 @@ def run_analysis(csv_path: str, x: str, y: str, plots_dir: str = None, encoding:
                     out["recommended_test"] = ""
                     out["stats"] = str(py_res) if py_res is not None else {}
                     out["plot_path"] = ""
-
-            # NOTE: meta update disabled to avoid overwriting encoding detected during upload.
-            # _write_meta_encoding_if_possible is intentionally NOT called here.
-
             return out
 
         except Exception as e:

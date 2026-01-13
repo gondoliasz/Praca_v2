@@ -6,7 +6,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // proxy all /api and /plots requests to backend on localhost:8000
+      // proxy all /api and /plots requests to backend on localhost:8001
       '/upload': {
         target: 'http://localhost:8001',
         changeOrigin: true,
