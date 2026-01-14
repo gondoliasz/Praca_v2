@@ -15,13 +15,26 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
     ws.title = "Summary"
     ws.append(["Pole", "Wartość"])
     ws.append(["Recommended test", result.get("recommended_test", "")])
+    
+    # Extract p-value from stats
+    stats = result.get("stats", {})
+    p_value_display = ""
+    if isinstance(stats, dict):
+        p_value_raw = stats.get("p_value")
+        if p_value_raw is not None:
+            # Format p-value to a reasonable precision
+            try:
+                p_value_display = f"{float(p_value_raw):.6f}"
+            except (ValueError, TypeError):
+                p_value_display = str(p_value_raw)
+    
+    ws.append(["P-value", p_value_display])
     ws.append(["Actual X", result.get("actual_x", "")])
     ws.append(["Actual Y", result.get("actual_y", "")])
     ws.append([])
     ws.append(["Info", "Plik wygenerowany przez aplikację Analiza zależności zmiennych"])
 
-    # Stats sheet
-    stats = result.get("stats", None)
+    # Stats sheet - note: stats was already fetched above
     ws2 = wb.create_sheet("Stats")
     if stats is None or (isinstance(stats, (dict, list)) and len(stats) == 0):
         ws2.append(["Brak statystyk"])
