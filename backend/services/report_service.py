@@ -18,32 +18,31 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
     
     # Extract p-value from stats
     stats = result.get("stats", {})
-    p_value = ""
+    p_value_display = ""
     if isinstance(stats, dict):
-        p_value = stats.get("p_value", "")
-        if p_value != "":
+        p_value_raw = stats.get("p_value")
+        if p_value_raw is not None and p_value_raw != "":
             # Format p-value to a reasonable precision
             try:
-                p_value = float(p_value)
-                p_value = f"{p_value:.6f}"
+                p_value_display = f"{float(p_value_raw):.6f}"
             except (ValueError, TypeError):
-                p_value = str(p_value)
+                p_value_display = str(p_value_raw)
     
-    ws.append(["P-value", p_value])
+    ws.append(["P-value", p_value_display])
     ws.append(["Actual X", result.get("actual_x", "")])
     ws.append(["Actual Y", result.get("actual_y", "")])
     ws.append([])
     ws.append(["Info", "Plik wygenerowany przez aplikację Analiza zależności zmiennych"])
 
-    # Stats sheet
-    stats = result.get("stats", None)
+    # Stats sheet - reuse stats from above
+    stats_for_sheet = stats if stats else None
     ws2 = wb.create_sheet("Stats")
-    if stats is None or (isinstance(stats, (dict, list)) and len(stats) == 0):
+    if stats_for_sheet is None or (isinstance(stats_for_sheet, (dict, list)) and len(stats_for_sheet) == 0):
         ws2.append(["Brak statystyk"])
     else:
-        if isinstance(stats, dict):
+        if isinstance(stats_for_sheet, dict):
             ws2.append(["Nazwa", "Wartość"])
-            for k, v in stats.items():
+            for k, v in stats_for_sheet.items():
                 try:
                     if isinstance(v, (dict, list)):
                         v_str = json.dumps(v, ensure_ascii=False)
@@ -52,9 +51,9 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
                 except Exception:
                     v_str = str(v)
                 ws2.append([k, v_str])
-        elif isinstance(stats, list):
+        elif isinstance(stats_for_sheet, list):
             try:
-                df = pd.DataFrame(stats)
+                df = pd.DataFrame(stats_for_sheet)
                 if df.empty:
                     ws2.append(["Brak danych w liście statystyk"])
                 else:
@@ -62,10 +61,10 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
                         ws2.append(r)
             except Exception:
                 ws2.append(["Index", "Value"])
-                for i, s in enumerate(stats):
+                for i, s in enumerate(stats_for_sheet):
                     ws2.append([i, str(s)])
         else:
-            ws2.append([str(stats)])
+            ws2.append([str(stats_for_sheet)])
 
     # Plot sheet
     plot_b64 = result.get("plot_base64")
