@@ -427,9 +427,12 @@ async def export_excel(payload: dict):
         filename_ascii = _safe_name(filename)
         if not filename_ascii.endswith('.xlsx'):
             filename_ascii = filename_ascii + '.xlsx'
+        # Ensure filename is not empty after ASCII conversion
+        if not filename_ascii or filename_ascii == '.xlsx':
+            filename_ascii = f"analysis_{file_id}.xlsx"
         
         # Use RFC 2231 encoding for non-ASCII characters
-        filename_encoded = quote(filename.encode('utf-8'))
+        filename_encoded = quote(filename.encode('utf-8'), safe='')
         
         # Provide both ASCII fallback and UTF-8 encoded filename
         headers = {
