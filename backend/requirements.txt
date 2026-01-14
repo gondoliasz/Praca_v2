@@ -5,3 +5,5 @@ numpy==1.26.4
 scipy==1.11.3
 rpy2==3.5.28
 python-multipart==0.0.6
+openpyxl==3.1.2
+Pillow==10.2.0

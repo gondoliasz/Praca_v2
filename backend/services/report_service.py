@@ -1,5 +1,6 @@
 from io import BytesIO
 import base64
+import json
 from typing import Any, Dict
 from openpyxl import Workbook
 from openpyxl.utils.dataframe import dataframe_to_rows
@@ -30,7 +31,7 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
             for k, v in stats.items():
                 try:
                     if isinstance(v, (dict, list)):
-                        v_str = pd.io.json.dumps(v, ensure_ascii=False)
+                        v_str = json.dumps(v, ensure_ascii=False)
                     else:
                         v_str = str(v)
                 except Exception:

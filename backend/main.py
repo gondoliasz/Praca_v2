@@ -1,10 +1,12 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 import pandas as pd
 import os
 import uuid
 import unicodedata
 from . import r_interface
+from .services import report_service
 import json
 import chardet
 import csv
@@ -278,3 +280,155 @@ async def analyze(payload: dict):
         "used_delimiter": delimiter,
         "used_header_encoding": used_enc_for_header if 'used_enc_for_header' in locals() else None
     }
+
+
+@app.post("/export")
+async def export_excel(payload: dict):
+    """
+    Wykonuje analizę i zwraca wygenerowany plik Excel jako StreamingResponse.
+    """
+    try:
+        print(f"[main.export] payload: {payload}")
+    except Exception:
+        pass
+
+    file_id = payload.get("file_id")
+    x = payload.get("x")
+    y = payload.get("y")
+    if not file_id or (x is None) or (y is None):
+        raise HTTPException(status_code=400, detail="file_id, x i y są wymagane")
+    
+    csv_path = os.path.join(UPLOAD_DIR, f"{file_id}.csv")
+    meta_path = os.path.join(UPLOAD_DIR, f"{file_id}.meta.json")
+    if not os.path.exists(csv_path):
+        raise HTTPException(status_code=404, detail="Zestaw danych nie znaleziony")
+    
+    encoding = None
+    delimiter = None
+    if os.path.exists(meta_path):
+        try:
+            with open(meta_path, "r", encoding="utf-8") as mf:
+                meta = json.load(mf)
+                encoding = meta.get("encoding")
+                delimiter = meta.get("delimiter")
+        except Exception:
+            encoding = None
+            delimiter = None
+
+    # find headers (try a few encodings)
+    try:
+        headers = None
+        enc_to_try = []
+        if encoding:
+            enc_to_try.append(encoding)
+        enc_to_try += ["utf-8", "cp1250", "latin1", "iso-8859-2", "utf-16"]
+
+        used_enc_for_header = None
+        for e in enc_to_try:
+            try:
+                df_header = pd.read_csv(csv_path, nrows=0, encoding=e, sep=delimiter or None, engine="python")
+                headers = list(df_header.columns)
+                used_enc_for_header = e
+                break
+            except Exception:
+                continue
+
+        if headers is None:
+            # fallback: read first line as bytes
+            with open(csv_path, "rb") as f:
+                sample = f.read(2000)
+            det = chardet.detect(sample) if chardet else {"encoding": None}
+            enc_try = det.get("encoding") or "utf-8"
+            text = sample.decode(enc_try, errors="replace")
+            if delimiter:
+                hdr_line = text.splitlines()[0]
+                headers = hdr_line.split(delimiter)
+            else:
+                guessed = None
+                for d in [",", ";", "\t", "|"]:
+                    if d in text.splitlines()[0]:
+                        guessed = d
+                        break
+                hdr_line = text.splitlines()[0]
+                headers = hdr_line.split(guessed or ",")
+
+        def _safe_name_local(s: str) -> str:
+            nk = unicodedata.normalize("NFKD", s)
+            return nk.encode("ASCII", "ignore").decode("ASCII")
+
+        def resolve_col(sent):
+            for h in headers:
+                if h == sent:
+                    return h
+            for h in headers:
+                if _safe_name_local(h) == str(sent):
+                    return h
+            for h in headers:
+                if h.lower() == str(sent).lower():
+                    return h
+            return None
+
+        actual_x = resolve_col(x)
+        actual_y = resolve_col(y)
+        if actual_x is None or actual_y is None:
+            raise HTTPException(status_code=400, detail=f"Nie można znaleźć kolumn: {x}, {y}. Dostępne kolumny: {headers}")
+
+        try:
+            actual_x_index = headers.index(actual_x) + 1
+            actual_y_index = headers.index(actual_y) + 1
+        except Exception:
+            actual_x_index = None
+            actual_y_index = None
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Błąd odczytu nagłówka CSV: {e}")
+
+    try:
+        res = r_interface.run_analysis(csv_path, actual_x_index, actual_y_index, plots_dir=PLOTS_DIR, encoding=encoding, delimiter=delimiter)
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("[main.export] Exception in run_analysis:\n", tb)
+        raise HTTPException(status_code=500, detail={"error": str(e), "traceback": tb})
+
+    # Get plot as base64
+    plot_base64 = None
+    if res.get("plot_path"):
+        fname = res["plot_path"]
+        full_path = os.path.join(PLOTS_DIR, fname)
+        try:
+            with open(full_path, "rb") as pf:
+                plot_base64 = base64.b64encode(pf.read()).decode("ascii")
+        except Exception:
+            plot_base64 = TRANSPARENT_PNG_BASE64
+    else:
+        plot_base64 = TRANSPARENT_PNG_BASE64
+
+    # Prepare result for Excel generation
+    result = {
+        "recommended_test": res.get("recommended_test"),
+        "stats": res.get("stats"),
+        "plot_base64": plot_base64,
+        "actual_x": actual_x,
+        "actual_y": actual_y,
+    }
+
+    # Generate Excel file
+    try:
+        excel_io = report_service.generate_excel_report(result)
+        filename = f"analysis_{file_id}_{actual_x}_vs_{actual_y}.xlsx"
+        # Clean filename
+        filename = filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        return StreamingResponse(
+            excel_io,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers=headers
+        )
+    except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print("[main.export] Exception in generate_excel_report:\n", tb)
+        raise HTTPException(status_code=500, detail=f"Błąd generowania pliku Excel: {e}")
