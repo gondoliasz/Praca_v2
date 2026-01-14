@@ -5,6 +5,7 @@ import pandas as pd
 import os
 import uuid
 import unicodedata
+from urllib.parse import quote
 from . import r_interface
 from .services import report_service
 import json
@@ -421,7 +422,19 @@ async def export_excel(payload: dict):
         filename = f"analysis_{file_id}_{actual_x}_vs_{actual_y}.xlsx"
         # Clean filename
         filename = filename.replace(" ", "_").replace("/", "_").replace("\\", "_")
-        headers = {"Content-Disposition": f'attachment; filename="{filename}"'}
+        
+        # Create ASCII-safe fallback filename
+        filename_ascii = _safe_name(filename)
+        if not filename_ascii.endswith('.xlsx'):
+            filename_ascii = filename_ascii + '.xlsx'
+        
+        # Use RFC 2231 encoding for non-ASCII characters
+        filename_encoded = quote(filename.encode('utf-8'))
+        
+        # Provide both ASCII fallback and UTF-8 encoded filename
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename_ascii}"; filename*=UTF-8\'\'{filename_encoded}'
+        }
         return StreamingResponse(
             excel_io,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
