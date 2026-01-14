@@ -15,6 +15,21 @@ def generate_excel_report(result: Dict[str, Any]) -> BytesIO:
     ws.title = "Summary"
     ws.append(["Pole", "Wartość"])
     ws.append(["Recommended test", result.get("recommended_test", "")])
+    
+    # Extract p-value from stats
+    stats = result.get("stats", {})
+    p_value = ""
+    if isinstance(stats, dict):
+        p_value = stats.get("p_value", "")
+        if p_value != "":
+            # Format p-value to a reasonable precision
+            try:
+                p_value = float(p_value)
+                p_value = f"{p_value:.6f}"
+            except (ValueError, TypeError):
+                p_value = str(p_value)
+    
+    ws.append(["P-value", p_value])
     ws.append(["Actual X", result.get("actual_x", "")])
     ws.append(["Actual Y", result.get("actual_y", "")])
     ws.append([])
